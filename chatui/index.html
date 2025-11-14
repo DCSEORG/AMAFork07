@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expense Management AI Assistant</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .chat-container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        .chat-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        .chat-messages {
+            height: 500px;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f8f9fa;
+        }
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+            animation: fadeIn 0.3s;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .message.user {
+            justify-content: flex-end;
+        }
+        .message-content {
+            max-width: 70%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            word-wrap: break-word;
+        }
+        .message.user .message-content {
+            background: #667eea;
+            color: white;
+        }
+        .message.assistant .message-content {
+            background: white;
+            color: #333;
+            border: 1px solid #ddd;
+        }
+        .chat-input-container {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #ddd;
+        }
+        .chat-input {
+            display: flex;
+            gap: 10px;
+        }
+        .typing-indicator {
+            display: none;
+            padding: 10px;
+        }
+        .typing-indicator.active {
+            display: block;
+        }
+        .dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #667eea;
+            margin: 0 3px;
+            animation: typing 1.4s infinite;
+        }
+        .dot:nth-child(2) { animation-delay: 0.2s; }
+        .dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typing {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-10px); }
+        }
+        .function-call {
+            background: #e3f2fd;
+            border-left: 3px solid #2196f3;
+            padding: 10px;
+            margin: 5px 0;
+            font-size: 0.9em;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <h2><i class="bi bi-robot"></i> Expense Management AI Assistant</h2>
+            <p class="mb-0">Ask me to help manage expenses, check status, or perform actions</p>
+        </div>
+        
+        <div class="chat-messages" id="chatMessages">
+            <div class="message assistant">
+                <div class="message-content">
+                    <strong>AI Assistant:</strong><br>
+                    Hello! I can help you manage expenses using natural language. Try asking me to:
+                    <ul class="mt-2 mb-0">
+                        <li>Create a new expense</li>
+                        <li>Show pending expenses</li>
+                        <li>Approve or reject expenses</li>
+                        <li>Get expense summaries</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="typing-indicator" id="typingIndicator">
+            <div class="message assistant">
+                <div class="message-content">
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="chat-input-container">
+            <div class="chat-input">
+                <input 
+                    type="text" 
+                    id="userInput" 
+                    class="form-control" 
+                    placeholder="Type your message here..."
+                    onkeypress="handleKeyPress(event)"
+                >
+                <button class="btn btn-primary" onclick="sendMessage()">Send</button>
+            </div>
+            <small class="text-muted mt-2 d-block">
+                Example: "Show me all pending expenses" or "Create an expense for £25.50 for travel"
+            </small>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const API_BASE = window.location.origin;
+        const AZURE_OPENAI_ENDPOINT = 'YOUR_AZURE_OPENAI_ENDPOINT'; // To be configured
+        const AZURE_OPENAI_KEY = 'YOUR_API_KEY'; // To be configured (or use managed identity)
+
+        // Available functions that AI can call
+        const availableFunctions = {
+            get_expenses: async () => {
+                const response = await fetch(`${API_BASE}/api/expenses`);
+                return await response.json();
+            },
+            get_expenses_by_status: async (statusName) => {
+                const response = await fetch(`${API_BASE}/api/expenses/status/${statusName}`);
+                return await response.json();
+            },
+            create_expense: async (userId, categoryId, amount, date, description) => {
+                const response = await fetch(`${API_BASE}/api/expenses`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userId: parseInt(userId),
+                        categoryId: parseInt(categoryId),
+                        statusId: 1, // Draft
+                        amountMinor: Math.round(parseFloat(amount) * 100),
+                        currency: 'GBP',
+                        expenseDate: date,
+                        description: description
+                    })
+                });
+                return await response.json();
+            },
+            submit_expense: async (expenseId) => {
+                const response = await fetch(`${API_BASE}/api/expenses/${expenseId}/submit`, {
+                    method: 'POST'
+                });
+                return await response.json();
+            },
+            approve_expense: async (expenseId, reviewerId) => {
+                const response = await fetch(`${API_BASE}/api/expenses/${expenseId}/approve`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(parseInt(reviewerId))
+                });
+                return await response.json();
+            },
+            reject_expense: async (expenseId, reviewerId) => {
+                const response = await fetch(`${API_BASE}/api/expenses/${expenseId}/reject`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(parseInt(reviewerId))
+                });
+                return await response.json();
+            },
+            get_users: async () => {
+                const response = await fetch(`${API_BASE}/api/users`);
+                return await response.json();
+            },
+            get_categories: async () => {
+                const response = await fetch(`${API_BASE}/api/categories`);
+                return await response.json();
+            }
+        };
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('userInput');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            // Add user message to chat
+            addMessage('user', message);
+            input.value = '';
+            
+            // Show typing indicator
+            document.getElementById('typingIndicator').classList.add('active');
+            
+            // Process message with AI (simplified version without actual Azure OpenAI)
+            // In production, this would call Azure OpenAI API with function calling
+            await processMessageLocally(message);
+            
+            // Hide typing indicator
+            document.getElementById('typingIndicator').classList.remove('active');
+        }
+
+        async function processMessageLocally(message) {
+            const lowerMessage = message.toLowerCase();
+            
+            try {
+                // Simple pattern matching (in production, would use Azure OpenAI function calling)
+                if (lowerMessage.includes('pending') || lowerMessage.includes('submitted')) {
+                    const expenses = await availableFunctions.get_expenses_by_status('Submitted');
+                    const response = formatExpenseList(expenses, 'Pending Expenses');
+                    addMessage('assistant', response);
+                    
+                } else if (lowerMessage.includes('all expense')) {
+                    const expenses = await availableFunctions.get_expenses();
+                    const response = formatExpenseList(expenses, 'All Expenses');
+                    addMessage('assistant', response);
+                    
+                } else if (lowerMessage.includes('approved')) {
+                    const expenses = await availableFunctions.get_expenses_by_status('Approved');
+                    const response = formatExpenseList(expenses, 'Approved Expenses');
+                    addMessage('assistant', response);
+                    
+                } else if (lowerMessage.includes('create') || lowerMessage.includes('new expense')) {
+                    addMessage('assistant', 
+                        'To create an expense, I need some information:<br>' +
+                        '1. Employee ID (user ID)<br>' +
+                        '2. Category (Travel, Meals, Supplies, Accommodation, Other)<br>' +
+                        '3. Amount in GBP<br>' +
+                        '4. Date<br>' +
+                        '5. Description<br><br>' +
+                        'You can also use the main UI to create expenses more easily!'
+                    );
+                    
+                } else if (lowerMessage.includes('help')) {
+                    addMessage('assistant', 
+                        'I can help you with:<br>' +
+                        '• View expenses (all, pending, approved, rejected)<br>' +
+                        '• Create new expenses<br>' +
+                        '• Submit expenses for approval<br>' +
+                        '• Approve or reject expenses<br>' +
+                        '• Get user and category information<br><br>' +
+                        'Just ask me in natural language!'
+                    );
+                    
+                } else {
+                    addMessage('assistant', 
+                        'I\'m a demo AI assistant. In production, I would use Azure OpenAI with function calling to:<br>' +
+                        '1. Understand your request using GPT-4<br>' +
+                        '2. Call the appropriate API functions<br>' +
+                        '3. Format and return the results<br><br>' +
+                        'Try asking: "Show me all pending expenses" or "Help"'
+                    );
+                }
+            } catch (error) {
+                addMessage('assistant', `Error: ${error.message}`);
+            }
+        }
+
+        function formatExpenseList(expenses, title) {
+            if (!expenses || expenses.length === 0) {
+                return `No ${title.toLowerCase()} found.`;
+            }
+            
+            let html = `<strong>${title} (${expenses.length}):</strong><br><br>`;
+            expenses.forEach(exp => {
+                const amount = (exp.amountMinor / 100).toFixed(2);
+                html += `<div class="function-call">` +
+                    `ID: ${exp.expenseId} | ` +
+                    `${exp.user?.userName || 'Unknown'} | ` +
+                    `£${amount} | ` +
+                    `${exp.category?.categoryName || 'Unknown'} | ` +
+                    `${exp.status?.statusName || 'Unknown'}` +
+                    `</div>`;
+            });
+            
+            return html;
+        }
+
+        function addMessage(sender, content) {
+            const messagesContainer = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            
+            if (sender === 'user') {
+                contentDiv.innerHTML = `<strong>You:</strong><br>${escapeHtml(content)}`;
+            } else {
+                contentDiv.innerHTML = `<strong>AI Assistant:</strong><br>${content}`;
+            }
+            
+            messageDiv.appendChild(contentDiv);
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Initialize
+        console.log('Expense Management AI Assistant loaded');
+        console.log('Available functions:', Object.keys(availableFunctions));
+    </script>
+</body>
+</html>

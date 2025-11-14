@@ -1,0 +1,277 @@
+@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Expense Management System";
+}
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1 class="display-5">Expense Management System</h1>
+            <p class="text-muted">Manage and track your expenses</p>
+        </div>
+        <div class="col-auto">
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newExpenseModal">
+                <i class="bi bi-plus-circle"></i> New Expense
+            </button>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-light">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">Total Expenses</h6>
+                    <h3 class="card-title">@Model.Expenses.Count</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning bg-opacity-10">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">Pending</h6>
+                    <h3 class="card-title">@Model.Expenses.Count(e => e.Status.StatusName == "Submitted")</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success bg-opacity-10">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">Approved</h6>
+                    <h3 class="card-title">@Model.Expenses.Count(e => e.Status.StatusName == "Approved")</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-danger bg-opacity-10">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">Rejected</h6>
+                    <h3 class="card-title">@Model.Expenses.Count(e => e.Status.StatusName == "Rejected")</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Expenses Table -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Expense List</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover" id="expenseTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Employee</th>
+                            <th>Category</th>
+                            <th>Amount</th>
+                            <th>Date</th>
+                            <th>Description</th>
+                            <th>Status</th>
+                            <th>Reviewed By</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var expense in Model.Expenses)
+                        {
+                            <tr>
+                                <td>@expense.ExpenseId</td>
+                                <td>@expense.User.UserName</td>
+                                <td>@expense.Category.CategoryName</td>
+                                <td>£@expense.AmountGBP.ToString("N2")</td>
+                                <td>@expense.ExpenseDate.ToString("dd/MM/yyyy")</td>
+                                <td>@(expense.Description ?? "-")</td>
+                                <td>
+                                    @if (expense.Status.StatusName == "Approved")
+                                    {
+                                        <span class="badge bg-success">@expense.Status.StatusName</span>
+                                    }
+                                    else if (expense.Status.StatusName == "Rejected")
+                                    {
+                                        <span class="badge bg-danger">@expense.Status.StatusName</span>
+                                    }
+                                    else if (expense.Status.StatusName == "Submitted")
+                                    {
+                                        <span class="badge bg-warning">@expense.Status.StatusName</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">@expense.Status.StatusName</span>
+                                    }
+                                </td>
+                                <td>@(expense.Reviewer?.UserName ?? "-")</td>
+                                <td>
+                                    @if (expense.Status.StatusName == "Submitted")
+                                    {
+                                        <button class="btn btn-sm btn-success" onclick="approveExpense(@expense.ExpenseId)">Approve</button>
+                                        <button class="btn btn-sm btn-danger" onclick="rejectExpense(@expense.ExpenseId)">Reject</button>
+                                    }
+                                    @if (expense.Status.StatusName == "Draft")
+                                    {
+                                        <button class="btn btn-sm btn-primary" onclick="submitExpense(@expense.ExpenseId)">Submit</button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- API Documentation Link -->
+    <div class="row mt-4">
+        <div class="col">
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle"></i> 
+                <strong>API Documentation:</strong> Access the Swagger API documentation at 
+                <a href="/swagger" class="alert-link">/swagger</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- New Expense Modal -->
+<div class="modal fade" id="newExpenseModal" tabindex="-1" aria-labelledby="newExpenseModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="newExpenseModalLabel">Create New Expense</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="newExpenseForm">
+                    <div class="mb-3">
+                        <label for="userId" class="form-label">Employee</label>
+                        <select class="form-select" id="userId" required>
+                            <option value="">Select Employee</option>
+                            @foreach (var user in Model.Users)
+                            {
+                                <option value="@user.UserId">@user.UserName (@user.Email)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="categoryId" class="form-label">Category</label>
+                        <select class="form-select" id="categoryId" required>
+                            <option value="">Select Category</option>
+                            @foreach (var category in Model.Categories)
+                            {
+                                <option value="@category.CategoryId">@category.CategoryName</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="amount" class="form-label">Amount (£)</label>
+                        <input type="number" class="form-control" id="amount" step="0.01" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="expenseDate" class="form-label">Date</label>
+                        <input type="date" class="form-control" id="expenseDate" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea class="form-control" id="description" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="createExpense()">Create Expense</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        async function createExpense() {
+            const userId = document.getElementById('userId').value;
+            const categoryId = document.getElementById('categoryId').value;
+            const amount = parseFloat(document.getElementById('amount').value);
+            const expenseDate = document.getElementById('expenseDate').value;
+            const description = document.getElementById('description').value;
+
+            // Find draft status ID
+            const draftStatusId = @Model.Statuses.First(s => s.StatusName == "Draft").StatusId;
+
+            const expense = {
+                userId: parseInt(userId),
+                categoryId: parseInt(categoryId),
+                statusId: draftStatusId,
+                amountMinor: Math.round(amount * 100), // Convert to pence
+                currency: 'GBP',
+                expenseDate: expenseDate,
+                description: description
+            };
+
+            const response = await fetch('/api/expenses', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(expense)
+            });
+
+            if (response.ok) {
+                location.reload();
+            } else {
+                alert('Error creating expense');
+            }
+        }
+
+        async function submitExpense(expenseId) {
+            const response = await fetch(`/api/expenses/${expenseId}/submit`, {
+                method: 'POST'
+            });
+
+            if (response.ok) {
+                location.reload();
+            } else {
+                alert('Error submitting expense');
+            }
+        }
+
+        async function approveExpense(expenseId) {
+            // Using first manager user for demo (in real app, would use logged-in user)
+            const managerId = @Model.Users.First(u => u.Role.RoleName == "Manager").UserId;
+
+            const response = await fetch(`/api/expenses/${expenseId}/approve`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(managerId)
+            });
+
+            if (response.ok) {
+                location.reload();
+            } else {
+                alert('Error approving expense');
+            }
+        }
+
+        async function rejectExpense(expenseId) {
+            // Using first manager user for demo (in real app, would use logged-in user)
+            const managerId = @Model.Users.First(u => u.Role.RoleName == "Manager").UserId;
+
+            const response = await fetch(`/api/expenses/${expenseId}/reject`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(managerId)
+            });
+
+            if (response.ok) {
+                location.reload();
+            } else {
+                alert('Error rejecting expense');
+            }
+        }
+    </script>
+}
+
