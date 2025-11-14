@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using ExpenseManagementApp.Data;
+using ExpenseManagementApp.Services;
 using Azure.Identity;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -14,6 +15,12 @@ builder.Services.AddDbContext<ExpenseDbContext>(options =>
 
 // Add API controllers for REST endpoints
 builder.Services.AddControllers();
+
+// Add HttpClient for AI service
+builder.Services.AddHttpClient();
+
+// Add AI Expense Service for GenAI integration
+builder.Services.AddScoped<AIExpenseService>();
 
 // Add Swagger/OpenAPI
 builder.Services.AddEndpointsApiExplorer();
